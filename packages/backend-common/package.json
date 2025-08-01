@@ -1,0 +1,9 @@
+{
+  "name": "@repo/backend-common",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "exports": {
+    "./jwtconfig": "./jwtconfig.ts",
+    "./types":"./types.ts"
+  }
+}
