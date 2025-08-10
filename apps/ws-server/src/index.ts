@@ -2,6 +2,7 @@ import { WebSocketServer } from "ws";
 import WebSocket from "ws";
 import { JWT_Secret } from "@repo/backend-common/jwtconfig"; // Adjust the import path as necessary
 import jwt, { JwtPayload } from "jsonwebtoken";
+import {prismaClient} from "@repo/db/client"; // Adjust the import path as necessary
 
 interface User {
     userId: string;
@@ -53,7 +54,7 @@ wss.on("connection", (ws, request) => {
         ws
     });
 
-    ws.on("message", (data) => {
+    ws.on("message", async (data) => {
         const parseData = JSON.parse(data as unknown as string);
 
         if (parseData.type === "joinRoom") {
@@ -73,6 +74,13 @@ wss.on("connection", (ws, request) => {
             const roomId = parseData.roomId;
             const message = parseData.message;
             const user = users.find(x => x.ws === ws);
+            await prismaClient.chat.create({
+                data: {
+                    roomId: roomId,
+                    userId: user?.userId || "",
+                    message: message
+                }
+            })
 
             users.forEach(user => {
                 if (user.rooms.includes(roomId)) {
