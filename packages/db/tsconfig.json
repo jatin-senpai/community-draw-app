@@ -3,6 +3,10 @@
     "compilerOptions": {
         "rootDir": "./src",
         "outDir": "./dist"
-    }
+    },
+    "include": [
+    "src",
+    "generated"  // ✅ <-- this is important
+  ]
 
 }

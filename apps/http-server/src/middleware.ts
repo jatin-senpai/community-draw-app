@@ -1,18 +1,22 @@
-import { NextFunction,Request,Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_Secret } from "@repo/backend-common/jwtconfig";
+
 export function middleware(req: Request, res: Response, next: NextFunction) {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ message: "Unauthorized: Token missing" });
     }
-    const decoded = jwt.verify(token, JWT_Secret);
-    if(decoded){
+
+    try {
+        const decoded = jwt.verify(token, JWT_Secret) as { userId: number };
+
+        // attach userId to request
         //@ts-ignore
         req.userId = decoded.userId;
+
         next();
-    }
-    else{
-        return res.status(401).json({ message: "Unauthorized" });
+    } catch (err) {
+        return res.status(401).json({ message: "Unauthorized: Invalid token" });
     }
 }
