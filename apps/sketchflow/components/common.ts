@@ -1,11 +1,15 @@
 export interface DrawProps {
-    type: "rect" | "circle" | "line";
+    type: "rect" | "circle" | "line" | "text";
     startX: number;
     startY: number;
     height?: number;
     width?: number;
     endX?: number;
     endY?: number;
+    radius?: number;
+    text?: string;
 
 }
-export let existshapes:DrawProps[] = []
+// common.ts
+export const existshapes: DrawProps[] = []; 
+

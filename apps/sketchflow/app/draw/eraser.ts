@@ -1,4 +1,5 @@
-import { DrawProps, existshapes } from "@/components/common";
+import { existshapes } from "@/components/common";
+import { redrawAll } from "@/components/draw";
 
 export function Eraser(canvasRef: React.RefObject<HTMLCanvasElement>) {
   const canvas = canvasRef.current;
@@ -24,66 +25,62 @@ export function Eraser(canvasRef: React.RefObject<HTMLCanvasElement>) {
   }
 
   function eraseAt(x: number, y: number) {
-    for (let i = 0; i < existshapes.length; i++) {
+    let erased = false;
+
+    // loop backwards so splice doesn’t mess with indexes
+    for (let i = existshapes.length - 1; i >= 0; i--) {
       const shape = existshapes[i];
 
-      if (shape.type === "rect") {
-        if (
-          x >= shape.startX &&
-          x <= shape.startX + shape.width! &&
-          y >= shape.startY &&
-          y <= shape.startY + shape.height!
-        ) {
+      // ✅ FIXED RECTANGLE ERASE
+      if (shape.type === "rect" && shape.width !== undefined && shape.height !== undefined) {
+        const x1 = Math.min(shape.startX, shape.startX + shape.width);
+        const x2 = Math.max(shape.startX, shape.startX + shape.width);
+        const y1 = Math.min(shape.startY, shape.startY + shape.height);
+        const y2 = Math.max(shape.startY, shape.startY + shape.height);
+
+        if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
           existshapes.splice(i, 1);
-          redrawAll();
-          break;
+          erased = true;
         }
       }
 
-      if (shape.type === "line") {
-        const dist = pointToLineDistance(
-          x,
-          y,
-          shape.startX,
-          shape.startY,
-          shape.endX!,
-          shape.endY!
-        );
+      else if (shape.type === "line" && shape.endX !== undefined && shape.endY !== undefined) {
+        const dist = pointToLineDistance(x, y, shape.startX, shape.startY, shape.endX, shape.endY);
         if (dist < 5) {
           existshapes.splice(i, 1);
-          redrawAll();
-          break;
+          erased = true;
         }
       }
 
-      // TODO: add circle detection here
+      else if (shape.type === "circle" && shape.radius !== undefined) {
+        const dist = Math.sqrt((x - shape.startX) ** 2 + (y - shape.startY) ** 2);
+        if (dist <= shape.radius) {
+          existshapes.splice(i, 1);
+          erased = true;
+        }
+      }
+
+      else if (shape.type === "text" && shape.text) {
+        if(!ctx) return
+        ctx.font = "16px Arial";
+        const metrics = ctx.measureText(shape.text);
+        const width = metrics.width;
+        const height = 16; // estimate baseline height
+        if (x >= shape.startX && x <= shape.startX + width &&
+            y <= shape.startY && y >= shape.startY - height) {
+          existshapes.splice(i, 1);
+          erased = true;
+        }
+      }
+    }
+
+    if (erased) {
+      if(!ctx) return
+      redrawAll(ctx, canvas);
     }
   }
 
-  function redrawAll() {
-    if(!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    existshapes.forEach((shape) => {
-      ctx.strokeStyle = "white";
-      if (shape.type === "rect") {
-        ctx.strokeRect(shape.startX, shape.startY, shape.width!, shape.height!);
-      } else if (shape.type === "line") {
-        ctx.beginPath();
-        ctx.moveTo(shape.startX, shape.startY);
-        ctx.lineTo(shape.endX!, shape.endY!);
-        ctx.stroke();
-      }
-    });
-  }
-
-  function pointToLineDistance(
-    px: number,
-    py: number,
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number
-  ) {
+  function pointToLineDistance(px:number, py:number, x1:number, y1:number, x2:number, y2:number) {
     const A = px - x1;
     const B = py - y1;
     const C = x2 - x1;
@@ -95,29 +92,19 @@ export function Eraser(canvasRef: React.RefObject<HTMLCanvasElement>) {
     if (len_sq !== 0) param = dot / len_sq;
 
     let xx, yy;
-
-    if (param < 0) {
-      xx = x1;
-      yy = y1;
-    } else if (param > 1) {
-      xx = x2;
-      yy = y2;
-    } else {
-      xx = x1 + param * C;
-      yy = y1 + param * D;
-    }
+    if (param < 0) { xx = x1; yy = y1; }
+    else if (param > 1) { xx = x2; yy = y2; }
+    else { xx = x1 + param * C; yy = y1 + param * D; }
 
     const dx = px - xx;
     const dy = py - yy;
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  // ✅ attach named listeners
   canvas.addEventListener("mousedown", onMouseDown);
   canvas.addEventListener("mousemove", onMouseMove);
   canvas.addEventListener("mouseup", onMouseUp);
 
-  // ✅ cleanup for when tool changes
   return () => {
     canvas.removeEventListener("mousedown", onMouseDown);
     canvas.removeEventListener("mousemove", onMouseMove);
