@@ -33,4 +33,5 @@ model Chat {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   message   String
+  createdAt DateTime @default(now()) // 👈 add this
 }

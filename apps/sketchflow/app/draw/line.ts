@@ -1,68 +1,90 @@
-import { existshapes } from "../../components/common";
-import { redrawAll } from "@/components/draw";
+import { DrawProps } from "../../components/common";
+import { redrawAll } from "../../components/draw";
+import { v4 as uuidv4 } from "uuid";
 
-export function Line(canvasRef: React.RefObject<HTMLCanvasElement>) {
+export function Line(
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  setShapes: React.Dispatch<React.SetStateAction<DrawProps[]>>,
+  socket: WebSocket,
+  roomId: number
+) {
   const canvas = canvasRef.current;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  let clicked = false;
+  let drawing = false;
   let startX = 0;
   let startY = 0;
+  let previewShape: DrawProps | null = null;
 
   function onMouseDown(e: MouseEvent) {
-    clicked = true;
+    drawing = true;
     startX = e.offsetX;
     startY = e.offsetY;
-  }
-
-  function onMouseUp(e: MouseEvent) {
-    if (!clicked) return;
-    clicked = false;
-
-    const endX = e.offsetX;
-    const endY = e.offsetY;
-
-    existshapes.push({
-      type: "line",
-      startX,
-      startY,
-      endX,
-      endY,
-    });
-
-    // redraw with the new line added
-    if(!ctx) return
-    redrawAll(ctx, canvas);
+    previewShape = null;
   }
 
   function onMouseMove(e: MouseEvent) {
-    if (!ctx || !clicked) return;
+    if (!drawing) return;
 
-    const endX = e.offsetX;
-    const endY = e.offsetY;
+    previewShape = {
+      id: uuidv4(), // temporary ID for preview
+      type: "line",
+      startX,
+      startY,
+      endX: e.offsetX,
+      endY: e.offsetY,
+    };
 
-    // redraw everything first
-    redrawAll(ctx, canvas);
-
-    // then preview current line
-    ctx.strokeStyle = "white";
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(endX, endY);
-    ctx.stroke();
+    setShapes((prev) => {
+      //@ts-ignore
+      redrawAll(ctx, canvas, [...prev, ...(previewShape ? [previewShape] : [])]);
+      return prev; // don't commit preview to state
+    });
   }
 
-  
-  canvas.addEventListener("mousedown", onMouseDown);
-  canvas.addEventListener("mouseup", onMouseUp);
-  canvas.addEventListener("mousemove", onMouseMove);
+  function onMouseUp(e: MouseEvent) {
+    if (!drawing) return;
+    drawing = false;
 
-  
+    const newShape: DrawProps = {
+      id: uuidv4(), // permanent ID
+      type: "line",
+      startX,
+      startY,
+      endX: e.offsetX,
+      endY: e.offsetY,
+    };
+    previewShape = null;
+
+    // Commit new shape
+    setShapes((prev) => {
+      const updated = [...prev, newShape];
+      //@ts-ignore
+      redrawAll(ctx, canvas, updated);
+      return updated;
+    });
+
+    // Broadcast to server/other clients
+    socket.send(
+      JSON.stringify({
+        type: "chat",
+        roomId,
+        message: JSON.stringify(newShape),
+      })
+    );
+  }
+
+  // Attach listeners
+  canvas.addEventListener("mousedown", onMouseDown);
+  canvas.addEventListener("mousemove", onMouseMove);
+  canvas.addEventListener("mouseup", onMouseUp);
+
+  // Cleanup on unmount
   return () => {
     canvas.removeEventListener("mousedown", onMouseDown);
-    canvas.removeEventListener("mouseup", onMouseUp);
     canvas.removeEventListener("mousemove", onMouseMove);
+    canvas.removeEventListener("mouseup", onMouseUp);
   };
 }

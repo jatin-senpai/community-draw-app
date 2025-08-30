@@ -1,113 +1,103 @@
-import { existshapes } from "@/components/common";
-import { redrawAll } from "@/components/draw";
+import { DrawProps } from "../../components/common";
+import { redrawAll } from "../../components/draw";
+import axios from "axios";
+import { httpUrl } from "../../components/config";
 
-export function Eraser(canvasRef: React.RefObject<HTMLCanvasElement>) {
+const TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlMDViNGUxMC0xMDkyLTQwZmYtYjI1MS04NGEzNzJmOWNiZmEiLCJpYXQiOjE3NTYxMTY5MTd9.LhMQNhlP2sDjIOYxOSQ00sU5kJyqscKoWSercr9ImSo";
+
+export function Eraser(
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  setShapes: React.Dispatch<React.SetStateAction<DrawProps[]>>,
+  socket: WebSocket,
+  roomId: number
+) {
   const canvas = canvasRef.current;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  let erasing = false;
+  function isShapeHit(s: DrawProps, x: number, y: number): boolean {
+    if (s.type === "rect" && s.width && s.height) {
+      const within =
+        x >= s.startX &&
+        x <= s.startX + s.width &&
+        y >= s.startY &&
+        y <= s.startY + s.height;
+      const nearEdge =
+        Math.abs(x - s.startX) < 5 ||
+        Math.abs(x - (s.startX + s.width)) < 5 ||
+        Math.abs(y - s.startY) < 5 ||
+        Math.abs(y - (s.startY + s.height)) < 5;
+      return within || nearEdge;
+    } else if (s.type === "circle" && s.radius) {
+      const dx = x - s.startX;
+      const dy = y - s.startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return Math.abs(dist - s.radius) < 5;
+    } else if (s.type === "line" && s.endX && s.endY) {
+      const A = x - s.startX;
+      const B = y - s.startY;
+      const C = s.endX - s.startX;
+      const D = s.endY - s.startY;
 
-  function onMouseDown(e: MouseEvent) {
-    erasing = true;
-    eraseAt(e.offsetX, e.offsetY);
-  }
+      const dot = A * C + B * D;
+      const lenSq = C * C + D * D;
+      const t = Math.max(0, Math.min(1, dot / lenSq));
 
-  function onMouseMove(e: MouseEvent) {
-    if (erasing) {
-      eraseAt(e.offsetX, e.offsetY);
+      const px = s.startX + t * C;
+      const py = s.startY + t * D;
+      const dist = Math.hypot(px - x, py - y);
+      return dist < 5;
+    } else if (s.type === "text" && s.text) {
+      return (
+        x >= s.startX &&
+        x <= s.startX + s.text.length * 10 &&
+        y <= s.startY &&
+        y >= s.startY - 20
+      );
     }
+    return false;
   }
 
-  function onMouseUp() {
-    erasing = false;
+  async function onClick(e: MouseEvent) {
+    const x = e.offsetX;
+    const y = e.offsetY;
+
+    setShapes((prev) => {
+      const shape = prev.find((s) => isShapeHit(s, x, y));
+      if (!shape) return prev;
+
+      const updated = prev.filter((s) => s.id !== shape.id);
+
+      // @ts-ignore
+      redrawAll(ctx, canvas, updated);
+
+      // delete from DB (UUID string, not number)
+      if (!shape.id.toString().startsWith("temp")) {
+        axios.delete(`${httpUrl}/chats/${roomId}/${shape.id}`, {
+          headers: {
+            Authorization: `Bearer ${TOKEN}`,
+          },
+        });
+      }
+
+      // broadcast erase
+      socket.send(
+        JSON.stringify({
+          type: "erase",
+          roomId,
+          shapeId: shape.id,
+        })
+      );
+
+      return updated;
+    });
   }
 
-  function eraseAt(x: number, y: number) {
-    let erased = false;
-
-    // loop backwards so splice doesn’t mess with indexes
-    for (let i = existshapes.length - 1; i >= 0; i--) {
-      const shape = existshapes[i];
-
-      // ✅ FIXED RECTANGLE ERASE
-      if (shape.type === "rect" && shape.width !== undefined && shape.height !== undefined) {
-        const x1 = Math.min(shape.startX, shape.startX + shape.width);
-        const x2 = Math.max(shape.startX, shape.startX + shape.width);
-        const y1 = Math.min(shape.startY, shape.startY + shape.height);
-        const y2 = Math.max(shape.startY, shape.startY + shape.height);
-
-        if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
-          existshapes.splice(i, 1);
-          erased = true;
-        }
-      }
-
-      else if (shape.type === "line" && shape.endX !== undefined && shape.endY !== undefined) {
-        const dist = pointToLineDistance(x, y, shape.startX, shape.startY, shape.endX, shape.endY);
-        if (dist < 5) {
-          existshapes.splice(i, 1);
-          erased = true;
-        }
-      }
-
-      else if (shape.type === "circle" && shape.radius !== undefined) {
-        const dist = Math.sqrt((x - shape.startX) ** 2 + (y - shape.startY) ** 2);
-        if (dist <= shape.radius) {
-          existshapes.splice(i, 1);
-          erased = true;
-        }
-      }
-
-      else if (shape.type === "text" && shape.text) {
-        if(!ctx) return
-        ctx.font = "16px Arial";
-        const metrics = ctx.measureText(shape.text);
-        const width = metrics.width;
-        const height = 16; // estimate baseline height
-        if (x >= shape.startX && x <= shape.startX + width &&
-            y <= shape.startY && y >= shape.startY - height) {
-          existshapes.splice(i, 1);
-          erased = true;
-        }
-      }
-    }
-
-    if (erased) {
-      if(!ctx) return
-      redrawAll(ctx, canvas);
-    }
-  }
-
-  function pointToLineDistance(px:number, py:number, x1:number, y1:number, x2:number, y2:number) {
-    const A = px - x1;
-    const B = py - y1;
-    const C = x2 - x1;
-    const D = y2 - y1;
-
-    const dot = A * C + B * D;
-    const len_sq = C * C + D * D;
-    let param = -1;
-    if (len_sq !== 0) param = dot / len_sq;
-
-    let xx, yy;
-    if (param < 0) { xx = x1; yy = y1; }
-    else if (param > 1) { xx = x2; yy = y2; }
-    else { xx = x1 + param * C; yy = y1 + param * D; }
-
-    const dx = px - xx;
-    const dy = py - yy;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  canvas.addEventListener("mousedown", onMouseDown);
-  canvas.addEventListener("mousemove", onMouseMove);
-  canvas.addEventListener("mouseup", onMouseUp);
+  canvas.addEventListener("click", onClick);
 
   return () => {
-    canvas.removeEventListener("mousedown", onMouseDown);
-    canvas.removeEventListener("mousemove", onMouseMove);
-    canvas.removeEventListener("mouseup", onMouseUp);
+    canvas.removeEventListener("click", onClick);
   };
 }

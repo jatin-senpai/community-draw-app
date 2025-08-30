@@ -1,73 +1,119 @@
-import { existshapes,DrawProps } from "../../components/common";
+import { DrawProps } from "../../components/common";
 import { redrawAll } from "../../components/draw";
-export function Circle(canvasRef:React.RefObject<HTMLCanvasElement>){
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+import { v4 as uuidv4 } from "uuid";
 
-    let clicked = false;
-    let startX = 0;
-    let startY = 0;
+const TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlMDViNGUxMC0xMDkyLTQwZmYtYjI1MS04NGEzNzJmOWNiZmEiLCJpYXQiOjE3NTYxMTY5MTd9.LhMQNhlP2sDjIOYxOSQ00sU5kJyqscKoWSercr9ImSo"; // replace with your full JWT
 
-    function onMouseDown(e: MouseEvent) {
-      clicked = true;
-      startX = e.offsetX;
-      startY = e.offsetY;
-    }
+export function Circle(
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  setShapes: React.Dispatch<React.SetStateAction<DrawProps[]>>,
+  socket: WebSocket,
+  roomId: number
+) {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
 
-    function onMouseUp(e: MouseEvent) {
-      if (!clicked) return;
-      clicked = false;
+  let drawing = false;
+  let startX = 0;
+  let startY = 0;
 
-      const endX = e.offsetX;
-      const endY = e.offsetY;
+  function onMouseDown(e: MouseEvent) {
+    drawing = true;
+    startX = e.offsetX;
+    startY = e.offsetY;
+  }
 
-      const radius = Math.sqrt(
-        Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)
-      );
+  function onMouseMove(e: MouseEvent) {
+    if (!drawing) return;
 
-      existshapes.push({
-        type: "circle",
-        startX,
-        startY,
-        radius,
-      } as DrawProps & { radius: number });
+    const currentX = e.offsetX;
+    const currentY = e.offsetY;
+    const radius = Math.hypot(currentX - startX, currentY - startY);
 
-      // redraw with the new circle added
-      if(!ctx) return
-      redrawAll(ctx, canvas);
-    }
-
-    function onMouseMove(e: MouseEvent) {
-      if (!ctx || !clicked) return;
-
-      const currentX = e.offsetX;
-      const currentY = e.offsetY;
-
-      const radius = Math.sqrt(
-        Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2)
-      );
-
-      // redraw everything first
-      redrawAll(ctx, canvas);
-
-      // then preview current circle
-      ctx.strokeStyle = "white";
-      ctx.beginPath();
-      ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-  
-    canvas.addEventListener("mousedown", onMouseDown);
-    canvas.addEventListener("mouseup", onMouseUp);
-    canvas.addEventListener("mousemove", onMouseMove);
-  
-   
-    return () => {
-      canvas.removeEventListener("mousedown", onMouseDown);
-      canvas.removeEventListener("mouseup", onMouseUp);
-      canvas.removeEventListener("mousemove", onMouseMove);
+    const previewShape: DrawProps = {
+      id: "preview",
+      type: "circle",
+      startX,
+      startY,
+      radius,
     };
+
+    setShapes((prev) => {
+      const updated = [...prev.filter((s) => s.id !== "preview"), previewShape];
+      //@ts-ignore
+      redrawAll(ctx, canvas, updated);
+      return updated;
+    });
+  }
+
+  async function onMouseUp(e: MouseEvent) {
+    if (!drawing) return;
+    drawing = false;
+
+    const endX = e.offsetX;
+    const endY = e.offsetY;
+    const radius = Math.hypot(endX - startX, endY - startY);
+
+    if (radius < 2) return; // ignore tiny circles
+
+    const tempShape: DrawProps = {
+      id: uuidv4(),
+      type: "circle",
+      startX,
+      startY,
+      radius,
+    };
+
+    setShapes((prev) => {
+      const updated = [...prev.filter((s) => s.id !== "preview"), tempShape];
+      //@ts-ignore
+      redrawAll(ctx, canvas, updated);
+      return updated;
+    });
+
+    try {
+      const res = await fetch(`http://localhost:3003/chats/${roomId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TOKEN}`, 
+        },
+        body: JSON.stringify(tempShape),
+      });
+
+      const savedShape = await res.json();
+
+      setShapes((prev) => {
+        const updated = prev.map((s) =>
+          s.id === tempShape.id ? savedShape : s
+        );
+        //@ts-ignore
+        redrawAll(ctx, canvas, updated);
+        return updated;
+      });
+
+      socket.send(
+        JSON.stringify({
+          type: "chat",
+          roomId,
+          message: JSON.stringify(savedShape),
+        })
+      );
+    } catch (err) {
+      console.error("Error saving circle:", err);
+    }
+  }
+
+  canvas.addEventListener("mousedown", onMouseDown);
+  canvas.addEventListener("mousemove", onMouseMove);
+  canvas.addEventListener("mouseup", onMouseUp);
+
+  return () => {
+    canvas.removeEventListener("mousedown", onMouseDown);
+    canvas.removeEventListener("mousemove", onMouseMove);
+    canvas.removeEventListener("mouseup", onMouseUp);
+  };
 }

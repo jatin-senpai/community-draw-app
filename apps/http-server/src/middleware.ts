@@ -3,20 +3,25 @@ import jwt from "jsonwebtoken";
 import { JWT_Secret } from "@repo/backend-common/jwtconfig";
 
 export function middleware(req: Request, res: Response, next: NextFunction) {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-        return res.status(401).json({ message: "Unauthorized: Token missing" });
-    }
+  const authHeader = req.headers.authorization;
+  console.log("🔑 Incoming Authorization header:", authHeader);
 
-    try {
-        const decoded = jwt.verify(token, JWT_Secret) as { userId: number };
+  const token = authHeader?.split(" ")[1];
+  if (!token) {
+    console.warn("❌ No token provided");
+    return res.status(401).json({ message: "Unauthorized: Token missing" });
+  }
 
-        // attach userId to request
-        //@ts-ignore
-        req.userId = decoded.userId;
+  try {
+    const decoded = jwt.verify(token, JWT_Secret) as { userId: string };
+    console.log("✅ Token verified, decoded payload:", decoded);
 
-        next();
-    } catch (err) {
-        return res.status(401).json({ message: "Unauthorized: Invalid token" });
-    }
+    // @ts-ignore - attach to request
+    req.userId = decoded.userId;
+
+    next();
+  } catch (err: any) {
+    console.error("❌ JWT verification failed:", err.message);
+    return res.status(401).json({ message: `Unauthorized: ${err.message}` });
+  }
 }

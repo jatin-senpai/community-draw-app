@@ -1,107 +1,178 @@
+// ws-server.ts
 import { WebSocketServer } from "ws";
 import WebSocket from "ws";
-import { JWT_Secret } from "@repo/backend-common/jwtconfig"; // Adjust the import path as necessary
 import jwt, { JwtPayload } from "jsonwebtoken";
-import {prismaClient} from "@repo/db/client"; // Adjust the import path as necessary
+import { JWT_Secret } from "@repo/backend-common/jwtconfig";
+import { prismaClient } from "@repo/db/client";
 
-interface User {
-    userId: string;
-    rooms: string[];
-    ws: WebSocket;
+interface UserConn {
+  userId: string;
+  rooms: string[]; // array of stringified roomIds
+  ws: WebSocket;
 }
+
 const wss = new WebSocketServer({ port: 8080 });
-const users:User[]=[]
+const users: UserConn[] = [];
 
+function verifyToken(token: string): string | null {
+  try {
+    const decoded = jwt.verify(token, JWT_Secret);
+    if (typeof decoded === "string") return null;
+    const uid = (decoded as JwtPayload)?.userId;
+    return typeof uid === "string" ? uid : null;
+  } catch (e) {
+    console.error("Token verification failed:", e);
+    return null;
+  }
+}
 
-function checkUser(token: string): string | null{
-    try{
-        const decoded  = jwt.verify(token,JWT_Secret)
-
-        if(typeof decoded == "string"){
-            return null;
-        }
-
-        if(!decoded || !(decoded as JwtPayload).userId){
-            return null;
-            
-        }
-        return decoded.userId ;
-    }
-    catch(e){
-        console.error("Token verification failed:", e);
-        return null;
-    }
-     
-} 
 wss.on("connection", (ws, request) => {
-    const url = request.url; //ws:localhost:8080?token=12345
-    if (!url) {
-        return ws.close(1008, "Invalid URL");
+  const url = request.url; // e.g. "/?token=abc"
+  if (!url) {
+    ws.close(1008, "Invalid URL");
+    return;
+  }
+
+  const query = new URLSearchParams(url.split("?")[1] ?? "");
+  const token = query.get("token") || "";
+  const userId = verifyToken(token);
+
+  if (!userId) {
+    ws.close(1008, "Invalid token");
+    return;
+  }
+
+  // track user connection
+  const conn: UserConn = { userId, rooms: [], ws };
+  users.push(conn);
+
+  ws.on("close", () => {
+    const idx = users.indexOf(conn);
+    if (idx >= 0) users.splice(idx, 1);
+  });
+
+  ws.on("message", async (raw) => {
+    let data: any;
+    try {
+      data = JSON.parse(raw.toString());
+    } catch {
+      console.warn("Invalid WS payload:", raw.toString());
+      return;
     }
 
-    const queryParams = new URLSearchParams(url.split("?")[1]); // create array of ["ws:localhost:8080", "token=12345"]
-    const token = queryParams.get("token") || "";
-    const userId = checkUser(token);
+    // --- join room ---
+    if (data.type === "joinRoom") {
+      const roomId = String(data.roomId);
+      if (!conn.rooms.includes(roomId)) {
+        conn.rooms.push(roomId);
+      }
+      return;
+    }
 
-    if (userId == null) {
-        ws.close(1008, "Invalid token");
+    // --- leave room ---
+    if (data.type === "leaveRoom") {
+      const roomId = String(data.roomId);
+      conn.rooms = conn.rooms.filter((r) => r !== roomId);
+      return;
+    }
+
+    // --- new shape / chat ---
+    if (data.type === "chat") {
+      const roomIdNum = Number(data.roomId);
+      if (isNaN(roomIdNum)) return;
+
+      if (!conn.userId) {
+        console.error("Missing userId for chat");
         return;
-    }
+      }
 
-    users.push({
-        userId,
-        rooms: [],
-        ws
-    });
+      const rawMessage: string = data.message; // this is a JSON string from client
+      let shape: any;
+      try {
+        shape = JSON.parse(rawMessage);
+      } catch {
+        console.warn("WS chat payload is not valid JSON shape");
+        return;
+      }
 
-    ws.on("message", async (data) => {
-        const parseData = JSON.parse(data as unknown as string);
-
-        if (parseData.type === "joinRoom") {
-            const user = users.find(x => x.ws === ws);
-            user?.rooms.push(parseData.roomId);
-        }
-
-        if (parseData.type === "leaveRoom") {
-            const user = users.find(x => x.ws === ws);
-            if (!user) {
-                return;
-            }
-            user.rooms = user?.rooms.filter(x => x === parseData.roomId);
-        }
-
-        if (parseData.type === "chat") {
-            const roomId = parseInt(parseData.roomId);
-            const message = parseData.message;
-            const user = users.find(x => x.ws === ws);
-            console.log("Chat request:", { roomId, message, user });
-
-            try {
-        await prismaClient.chat.create({
-            data: {
-                roomId: roomId,
-                userId: user?.userId || "", // ensure userId exists in DB
-                message: message
-            }
+      // Persist in DB
+      let chat;
+      try {
+        chat = await prismaClient.chat.create({
+          data: {
+            roomId: roomIdNum,
+            userId: conn.userId,
+            message: rawMessage, // store raw (original) payload too
+          },
         });
-    } catch (err) {
+      } catch (err) {
         console.error("Error saving chat:", err);
+        return;
+      }
+
+      // Critical: overwrite/attach database id + userId so frontends can erase/delete
+      shape.id = chat.id;
+      shape.userId = conn.userId;
+
+      // Broadcast to everyone in the room (including sender)
+      // Keep the `message` field as a JSON string because your frontend expects msg.message to be a JSON string
+      const payload = JSON.stringify({
+        type: "chat",
+        roomId: roomIdNum,
+        message: JSON.stringify(shape),
+      });
+
+      users.forEach((u) => {
+        if (u.rooms.includes(String(roomIdNum))) {
+          try {
+            u.ws.send(payload);
+          } catch (e) {
+            console.warn("Failed to send ws payload", e);
+          }
+        }
+      });
+
+      return;
     }
 
-            users.forEach(user => {
-                if (user.rooms.includes(roomId.toString())) {
-                    user.ws.send(JSON.stringify({
-                        type: "chat",
-                        message: message,
-                        roomId
-                    }));
-                }
-            });
+    // --- erase shape ---
+    if (data.type === "erase") {
+      const roomIdNum = Number(data.roomId);
+      if (isNaN(roomIdNum)) return;
+
+      const shapeId: string = data.shapeId;
+      if (!shapeId) return;
+
+      // delete from DB (if present)
+      try {
+        await prismaClient.chat.delete({ where: { id: shapeId } });
+      } catch (err) {
+        console.error("Error deleting shape:", err);
+        // still broadcast erase so UIs stay in sync even if shape was already gone
+      }
+
+      // Broadcast erase
+      const payload = JSON.stringify({
+        type: "erase",
+        roomId: roomIdNum,
+        shapeId,
+      });
+
+      users.forEach((u) => {
+        if (u.rooms.includes(String(roomIdNum))) {
+          try {
+            u.ws.send(payload);
+          } catch (e) {
+            console.warn("Failed to send erase payload", e);
+          }
         }
-    });
+      });
+
+      return;
+    }
+
+    // Unknown types are ignored
+  });
 });
 
-
-        
-    
-    
+console.log("WS server listening on :8080");
