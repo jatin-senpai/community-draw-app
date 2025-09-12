@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,23 +6,26 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 model User {
-  id       String   @id @default(uuid())
-  email    String   @unique
-  name     String?
-  password String
-  photo    String?
-  rooms    Room[]   
-  chats    Chat[]
+  id          String       @id @default(uuid())
+  email       String       @unique
+  name        String?
+  password    String
+  photo       String?
+  rooms       Room[]       @relation("AdminRooms")  // rooms they admin
+  chats       Chat[]
+  roomMembers RoomMember[] // rooms they joined
 }
 
 model Room {
-  id        Int   @id @default(autoincrement())
-  slug      String   @unique
+  id        Int          @id @default(autoincrement())
+  slug      String       @unique
   adminId   String
-  admin     User     @relation(fields: [adminId], references: [id])
-  createdAt DateTime @default(now())
+  admin     User         @relation("AdminRooms", fields: [adminId], references: [id])
+  createdAt DateTime     @default(now())
   chats     Chat[]
+  members   RoomMember[]
 }
 
 model Chat {
@@ -33,5 +35,16 @@ model Chat {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   message   String
-  createdAt DateTime @default(now()) // 👈 add this
+  createdAt DateTime @default(now())
+}
+
+model RoomMember {
+  id     Int    @id @default(autoincrement())
+  userId String
+  roomId Int
+
+  user User @relation(fields: [userId], references: [id])
+  room Room @relation(fields: [roomId], references: [id])
+
+  @@unique([userId, roomId]) // prevent duplicate joins
 }

@@ -1,6 +1,7 @@
 // server.ts
 import express from "express";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import cors from "cors";
 import { prismaClient } from "@repo/db/client";
 import { UserSchema, SignInSchema, RoomSchema } from "@repo/backend-common/types";
@@ -8,61 +9,60 @@ import { JWT_Secret } from "@repo/backend-common/jwtconfig";
 import { middleware } from "./middleware";
 
 const app = express();
-app.use(cors({
-  origin: "*",
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+app.use(
+  cors({
+    origin: "*",
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 app.use(express.json());
 
-// --- signup ---
+
+// signup
 app.post("/signup", async (req, res) => {
   const parseData = UserSchema.safeParse(req.body);
-  if (!parseData.success) {
-    return res.status(400).json({ error: "invalid inputs" });
-  }
+  if (!parseData.success) return res.status(400).json({ error: "invalid inputs" });
+  
+
   try {
     const user = await prismaClient.user.create({
-      data: {
-        email: parseData.data.username,
-        password: parseData.data.password,
-        name: parseData.data.name,
-      },
+    data: {
+      email: parseData.data.email,
+      password: parseData.data.password,
+      name: parseData.data.name,
+    },
     });
-    res.json({ userId: user.id });
+
+    res.status(200).json({ userId: user.id });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "User already exists" });
   }
 });
 
-// --- signin ---
+// signin
 app.post("/signin", async (req, res) => {
   const parseData = SignInSchema.safeParse(req.body);
-  if (!parseData.success) {
-    return res.status(400).json({ error: "invalid inputs" });
-  }
+  if (!parseData.success) return res.status(400).json({ error: "invalid inputs" });
 
   const user = await prismaClient.user.findFirst({
-    where: {
-      email: parseData.data.username,
-      password: parseData.data.password,
-    },
-  });
-
-  if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  const token = jwt.sign({ userId: user.id }, JWT_Secret);
-  res.json({ token });
+  where: {
+    email: parseData.data.email,
+    password: parseData.data.password,
+  },
 });
 
-// --- create room ---
+
+  if (!user) return res.status(401).json({ error: "Invalid credentials" });
+
+  const token = jwt.sign({ userId: user.id }, JWT_Secret);
+  res.status(200).json({ token });
+});
+
+
 app.post("/create-room", middleware, async (req, res) => {
   const data = RoomSchema.safeParse(req.body);
-  if (!data.success) {
-    return res.status(400).json({ error: "invalid inputs" });
-  }
+  if (!data.success) return res.status(400).json({ error: "invalid inputs" });
 
   // @ts-ignore
   const userId = req.userId;
@@ -70,28 +70,67 @@ app.post("/create-room", middleware, async (req, res) => {
   try {
     const room = await prismaClient.room.create({
       data: {
-        slug: data.data.name,
+        slug: data.data.name, // could also generate uuid
         adminId: userId,
       },
     });
-    res.json({ roomId: room.id });
+
+
+    await prismaClient.roomMember.create({
+      data: {
+        userId,
+        roomId: room.id,
+      },
+    });
+
+    res.json({ roomId: room.id, slug: room.slug });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// --- fetch shapes/chats for a room ---
+
+app.post("/rooms/join/:slug", middleware, async (req, res) => {
+  const { slug } = req.params;
+  // @ts-ignore
+  const userId = req.userId;
+
+  const room = await prismaClient.room.findUnique({ where: { slug } });
+  if (!room) return res.status(404).json({ error: "Room not found" });
+
+  await prismaClient.roomMember.upsert({
+    where: {
+      userId_roomId: { userId, roomId: room.id },
+    },
+    update: {},
+    create: { userId, roomId: room.id },
+  });
+
+  res.json({ success: true, roomId: room.id });
+});
+
+app.get("/rooms", middleware, async (req, res) => {
+  // @ts-ignore
+  const userId = req.userId;
+
+  const memberships = await prismaClient.roomMember.findMany({
+    where: { userId },
+    include: { room: true },
+  });
+
+  return res.json({ rooms: memberships.map((m) => m.room) });
+});
+
+
 app.get("/chats/:roomId", middleware, async (req, res) => {
   try {
     const roomId = Number(req.params.roomId);
-    if (isNaN(roomId)) {
-      return res.status(400).json({ error: "Invalid roomId" });
-    }
+    if (isNaN(roomId)) return res.status(400).json({ error: "Invalid roomId" });
 
     const chats = await prismaClient.chat.findMany({
       where: { roomId },
-      orderBy: { id: "asc" },
+      orderBy: { createdAt: "asc" },
       take: 500,
     });
 
@@ -112,18 +151,13 @@ app.get("/chats/:roomId", middleware, async (req, res) => {
   }
 });
 
-// --- save shape ---
 app.post("/chats/:roomId", middleware, async (req, res) => {
   const roomId = Number(req.params.roomId);
-  if (isNaN(roomId)) {
-    return res.status(400).json({ error: "Invalid roomId" });
-  }
+  if (isNaN(roomId)) return res.status(400).json({ error: "Invalid roomId" });
 
   // @ts-ignore
   const userId = req.userId;
-  if (!userId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   try {
     const raw = JSON.stringify(req.body);
@@ -143,36 +177,31 @@ app.post("/chats/:roomId", middleware, async (req, res) => {
   }
 });
 
-// --- delete shape by DB id (safe version) ---
 app.delete("/chats/:roomId/:shapeId", middleware, async (req, res) => {
   const roomId = Number(req.params.roomId);
-  const shapeId = req.params.shapeId; // UUID string
+  const shapeId = req.params.shapeId;
 
-  if (isNaN(roomId)) {
-    return res.status(400).json({ error: "Invalid roomId" });
-  }
+  if (isNaN(roomId)) return res.status(400).json({ error: "Invalid roomId" });
 
   try {
-    // @ts-ignore injected by middleware
+    // @ts-ignore
     const userId = req.userId;
 
-    const deleted = await prismaClient.chat.deleteMany({
+    await prismaClient.chat.deleteMany({
       where: {
         id: shapeId,
-        roomId// only allow owner to delete
+        roomId,
+        userId, // only allow deleting own shapes
       },
     });
 
-    if (deleted.count === 0) {
-      return res.status(403).json({ error: "Not allowed or not found" });
-    }
-
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (err) {
     console.error("Error deleting shape:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 app.listen(3003, () => {
   console.log("HTTP server listening on :3003");

@@ -6,7 +6,7 @@ import { Eraser } from "@/app/draw/eraser";
 import { redrawAll } from "@/components/draw";
 import { Text } from "@/app/draw/text";
 import { Circle } from "@/app/draw/circle";
-import { getExistingShapes, DrawProps } from "./common";
+import { getExistingShapes, DrawProps, createMermaidShape } from "./common";
 
 export function Canvas({
   roomId,
@@ -19,12 +19,10 @@ export function Canvas({
   const [tool, setTool] = useState("");
   const [shapes, setShapes] = useState<DrawProps[]>([]);
 
-  // load existing DB shapes
   useEffect(() => {
     getExistingShapes(roomId).then((data) => setShapes(data));
   }, [roomId]);
 
-  // canvas size
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -32,24 +30,20 @@ export function Canvas({
     canvas.height = window.innerHeight;
   }, []);
 
-  // redraw when shapes change
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvasRef.current?.getContext("2d");
     if (ctx) redrawAll(ctx, canvasRef.current, shapes);
   }, [shapes]);
 
-  // receive from WS
   useEffect(() => {
     socket.onmessage = (event) => {
       const msg = JSON.parse(event.data);
 
       if (msg.type === "chat" && msg.message) {
-        const shape = JSON.parse(msg.message);
+        const shape: DrawProps = JSON.parse(msg.message);
         if (shape?.id) {
           setShapes((prev) => {
-            if (prev.find((s) => s.id === shape.id)) return prev; // avoid dupes
+            if (prev.find((s) => s.id === shape.id)) return prev;
             return [...prev, shape];
           });
         }
@@ -61,16 +55,72 @@ export function Canvas({
     };
   }, [socket]);
 
-  // tool handling
   useEffect(() => {
     let cleanup: (() => void) | undefined;
 
     if (tool === "rect") cleanup = Rect(canvasRef, setShapes, socket, roomId);
     if (tool === "line") cleanup = Line(canvasRef, setShapes, socket, roomId);
-    if (tool === "eraser")
-      cleanup = Eraser(canvasRef, setShapes, socket, roomId);
+    if (tool === "eraser") cleanup = Eraser(canvasRef, setShapes, socket, roomId);
     if (tool === "text") cleanup = Text(canvasRef, setShapes, socket, roomId);
     if (tool === "circle") cleanup = Circle(canvasRef, setShapes, socket, roomId);
+
+    if (tool === "mermaid") {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      function handleClick(e: MouseEvent) {
+        import("mermaid").then((mermaid) => {
+          const code = prompt(
+            "Enter Mermaid diagram code:",
+            "graph TD; A-->B; A-->C; B-->D; C-->D;"
+          );
+          if (!code) return;
+
+          const mouseX = e.offsetX;
+          const mouseY = e.offsetY;
+
+          mermaid.default
+            .render(`mermaid-${Date.now()}`, code)
+            .then(({ svg }) => {
+              const img = new Image();
+              const svgBlob = new Blob([svg], {
+                type: "image/svg+xml;charset=utf-8",
+              });
+              const url = URL.createObjectURL(svgBlob);
+
+              img.onload = () => {
+                const ctx = canvasRef.current?.getContext("2d");
+                if (ctx) {
+                  ctx.drawImage(img, mouseX, mouseY, 300, 200);
+                }
+                URL.revokeObjectURL(url);
+              };
+              img.src = url;
+
+              const shape = createMermaidShape({
+                id: crypto.randomUUID(),
+                code,
+                x: mouseX,
+                y: mouseY,
+                width: 300,
+                height: 200,
+              });
+
+              setShapes((prev) => [...prev, shape]);
+              socket.send(
+                JSON.stringify({
+                  type: "chat",
+                  roomId,
+                  message: JSON.stringify(shape),
+                })
+              );
+            });
+        });
+      }
+
+      canvas.addEventListener("click", handleClick);
+      cleanup = () => canvas.removeEventListener("click", handleClick);
+    }
 
     return () => {
       if (cleanup) cleanup();
@@ -81,36 +131,12 @@ export function Canvas({
     <>
       <canvas ref={canvasRef} className="block h-screen w-screen bg-black" />
       <div className="absolute top-0 left-1/2 transform -translate-x-1/2 flex gap-4 mt-5 z-10">
-        <button
-          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded shadow transition-colors duration-150"
-          onClick={() => setTool("rect")}
-        >
-          Rectangle
-        </button>
-        <button
-          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded shadow transition-colors duration-150"
-          onClick={() => setTool("circle")}
-        >
-          Circle
-        </button>
-        <button
-          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded shadow transition-colors duration-150"
-          onClick={() => setTool("line")}
-        >
-          Line
-        </button>
-        <button
-          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded shadow transition-colors duration-150"
-          onClick={() => setTool("eraser")}
-        >
-          Eraser
-        </button>
-        <button
-          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded shadow transition-colors duration-150"
-          onClick={() => setTool("text")}
-        >
-          Text
-        </button>
+        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("rect")}>Rectangle</button>
+        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("circle")}>Circle</button>
+        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("line")}>Line</button>
+        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("eraser")}>Eraser</button>
+        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("text")}>Text</button>
+        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("mermaid")}>Create Diagram</button>
       </div>
     </>
   );

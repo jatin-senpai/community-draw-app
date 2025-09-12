@@ -2,8 +2,7 @@ import { DrawProps } from "../../components/common";
 import { redrawAll } from "../../components/draw";
 import { v4 as uuidv4 } from "uuid";
 
-const TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlMDViNGUxMC0xMDkyLTQwZmYtYjI1MS04NGEzNzJmOWNiZmEiLCJpYXQiOjE3NTYxMTY5MTd9.LhMQNhlP2sDjIOYxOSQ00sU5kJyqscKoWSercr9ImSo"; // replace with your full JWT
+
 
 export function Circle(
   canvasRef: React.RefObject<HTMLCanvasElement>,
@@ -79,7 +78,7 @@ export function Circle(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${TOKEN}`, 
+          Authorization: `Bearer ${localStorage.getItem("token")}`, 
         },
         body: JSON.stringify(tempShape),
       });

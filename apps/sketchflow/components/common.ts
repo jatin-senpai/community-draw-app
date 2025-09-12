@@ -1,10 +1,9 @@
-// components/common.ts
 import axios from "axios";
 import { httpUrl } from "./config";
 
 export interface DrawProps {
-  id: string; // ✅ unique DB id (or message id)
-  type: "rect" | "circle" | "line" | "text";
+  id: string;
+  type: "rect" | "circle" | "line" | "text" | "mermaid";
   startX: number;
   startY: number;
   height?: number;
@@ -13,33 +12,63 @@ export interface DrawProps {
   endY?: number;
   radius?: number;
   text?: string;
-  userId?: string; // added for ownership
+  userId?: string;
+  code?: string;
+  x?: number;
+  y?: number;
 }
 
-/**
- * Fetch all existing shapes for a given room
- */
+export function createMermaidShape(shape: {
+  id: string;
+  code: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  userId?: string;
+}): DrawProps {
+  return {
+    id: shape.id,
+    type: "mermaid",
+    code: shape.code,
+    x: shape.x,
+    y: shape.y,
+    width: shape.width ?? 300,
+    height: shape.height ?? 200,
+    startX: shape.x,
+    startY: shape.y,
+    userId: shape.userId,
+  };
+}
+
 export async function getExistingShapes(roomId: number): Promise<DrawProps[]> {
   try {
+    const token = localStorage.getItem("token");
     const res = await axios.get(`${httpUrl}/chats/${roomId}`, {
-      headers: {
-        Authorization:
-          "Bearer " +
-          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJlMDViNGUxMC0xMDkyLTQwZmYtYjI1MS04NGEzNzJmOWNiZmEiLCJpYXQiOjE3NTYxMTY5MTd9.LhMQNhlP2sDjIOYxOSQ00sU5kJyqscKoWSercr9ImSo",
-      },
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
 
-    // ✅ backend returns array directly (not { messages: [...] })
     const shapes: DrawProps[] = (res.data as any[])
       .map((shape) => {
         if (!shape || !shape.type) return null;
         return {
-          ...shape,
           id: shape.id,
+          type: shape.type,
+          startX: shape.startX ?? shape.x ?? 0,
+          startY: shape.startY ?? shape.y ?? 0,
+          endX: shape.endX,
+          endY: shape.endY,
+          height: shape.height,
+          width: shape.width,
+          radius: shape.radius,
+          text: shape.text,
           userId: shape.userId,
+          code: shape.code,
+          x: shape.x,
+          y: shape.y,
         } as DrawProps;
       })
-      .filter((x): x is DrawProps => x !== null); // ✅ type guard removes nulls
+      .filter((x): x is DrawProps => x !== null);
 
     return shapes;
   } catch (err: any) {

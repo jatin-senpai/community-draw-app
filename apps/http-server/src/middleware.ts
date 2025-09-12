@@ -8,7 +8,7 @@ export function middleware(req: Request, res: Response, next: NextFunction) {
 
   const token = authHeader?.split(" ")[1];
   if (!token) {
-    console.warn("❌ No token provided");
+    console.warn(" No token provided");
     return res.status(401).json({ message: "Unauthorized: Token missing" });
   }
 
@@ -21,7 +21,7 @@ export function middleware(req: Request, res: Response, next: NextFunction) {
 
     next();
   } catch (err: any) {
-    console.error("❌ JWT verification failed:", err.message);
+    console.error(" JWT verification failed:", err.message);
     return res.status(401).json({ message: `Unauthorized: ${err.message}` });
   }
 }
