@@ -1,7 +1,6 @@
-import mermaid from "mermaid";
 import { DrawProps } from "./common";
 
-export async function redrawAll(
+export function redrawAll(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   shapes: DrawProps[]
@@ -31,26 +30,20 @@ export async function redrawAll(
 
     if (shape.type === "text" && shape.text) {
       ctx.fillStyle = "white";
-      ctx.font = "28px Arial"; 
+      ctx.font = "28px Arial";
       ctx.fillText(shape.text, shape.startX, shape.startY);
     }
 
-    if (shape.type === "mermaid" && shape.code) {
-      const { code, x = 50, y = 50, width = 300, height = 200 } = shape;
+    if (shape.type === "mermaid") {
+    const width = shape.width ?? 300;
+  const height = shape.height ?? 200;
+  const x = shape.x ?? 50;
+  const y = shape.y ?? 50;
 
-      const { svg } = await mermaid.render(`m-${shape.id}`, code);
-      const img = new Image();
-      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(svgBlob);
-
-      await new Promise<void>((resolve) => {
-        img.onload = () => {
-          ctx.drawImage(img, x, y, width, height);
-          URL.revokeObjectURL(url);
-          resolve();
-        };
-        img.src = url;
-      });
-    }
+  if (shape.img instanceof HTMLImageElement) {
+    // ✅ draw cached image instantly
+    ctx.drawImage(shape.img, x, y, width, height);
+  }
+}
   }
 }

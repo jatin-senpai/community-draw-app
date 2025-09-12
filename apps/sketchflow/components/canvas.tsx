@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useEffect, useState } from "react";
+import mermaid from "mermaid";
 import { Rect } from "@/app/draw/rect";
 import { Line } from "@/app/draw/line";
 import { Eraser } from "@/app/draw/eraser";
@@ -19,10 +20,12 @@ export function Canvas({
   const [tool, setTool] = useState("");
   const [shapes, setShapes] = useState<DrawProps[]>([]);
 
+  // load existing shapes
   useEffect(() => {
     getExistingShapes(roomId).then((data) => setShapes(data));
   }, [roomId]);
 
+  // canvas size
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -30,11 +33,15 @@ export function Canvas({
     canvas.height = window.innerHeight;
   }, []);
 
+  // redraw
   useEffect(() => {
-    const ctx = canvasRef.current?.getContext("2d");
-    if (ctx) redrawAll(ctx, canvasRef.current, shapes);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (ctx) redrawAll(ctx, canvas, shapes);
   }, [shapes]);
 
+  // WebSocket listener
   useEffect(() => {
     socket.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -55,6 +62,7 @@ export function Canvas({
     };
   }, [socket]);
 
+  // tools
   useEffect(() => {
     let cleanup: (() => void) | undefined;
 
@@ -65,61 +73,40 @@ export function Canvas({
     if (tool === "circle") cleanup = Circle(canvasRef, setShapes, socket, roomId);
 
     if (tool === "mermaid") {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      const code = prompt(
+        "Enter Mermaid diagram code:",
+        "graph TD; A-->B; A-->C; B-->D; C-->D;"
+      );
+      if (!code) return;
 
-      function handleClick(e: MouseEvent) {
-        import("mermaid").then((mermaid) => {
-          const code = prompt(
-            "Enter Mermaid diagram code:",
-            "graph TD; A-->B; A-->C; B-->D; C-->D;"
+      mermaid.render(`m-${Date.now()}`, code).then(({ svg }) => {
+        const img = new Image();
+        const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(svgBlob);
+
+        img.onload = () => {
+          const shape = createMermaidShape({
+            id: crypto.randomUUID(),
+            code,
+            x: 100,
+            y: 100,
+            img,
+          });
+
+          setShapes((prev) => [...prev, shape]);
+          socket.send(
+            JSON.stringify({
+              type: "chat",
+              roomId,
+              message: JSON.stringify(shape),
+            })
           );
-          if (!code) return;
 
-          const mouseX = e.offsetX;
-          const mouseY = e.offsetY;
+          URL.revokeObjectURL(url);
+        };
 
-          mermaid.default
-            .render(`mermaid-${Date.now()}`, code)
-            .then(({ svg }) => {
-              const img = new Image();
-              const svgBlob = new Blob([svg], {
-                type: "image/svg+xml;charset=utf-8",
-              });
-              const url = URL.createObjectURL(svgBlob);
-
-              img.onload = () => {
-                const ctx = canvasRef.current?.getContext("2d");
-                if (ctx) {
-                  ctx.drawImage(img, mouseX, mouseY, 300, 200);
-                }
-                URL.revokeObjectURL(url);
-              };
-              img.src = url;
-
-              const shape = createMermaidShape({
-                id: crypto.randomUUID(),
-                code,
-                x: mouseX,
-                y: mouseY,
-                width: 300,
-                height: 200,
-              });
-
-              setShapes((prev) => [...prev, shape]);
-              socket.send(
-                JSON.stringify({
-                  type: "chat",
-                  roomId,
-                  message: JSON.stringify(shape),
-                })
-              );
-            });
-        });
-      }
-
-      canvas.addEventListener("click", handleClick);
-      cleanup = () => canvas.removeEventListener("click", handleClick);
+        img.src = url;
+      });
     }
 
     return () => {
@@ -131,12 +118,12 @@ export function Canvas({
     <>
       <canvas ref={canvasRef} className="block h-screen w-screen bg-black" />
       <div className="absolute top-0 left-1/2 transform -translate-x-1/2 flex gap-4 mt-5 z-10">
-        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("rect")}>Rectangle</button>
-        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("circle")}>Circle</button>
-        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("line")}>Line</button>
-        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("eraser")}>Eraser</button>
-        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("text")}>Text</button>
-        <button className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded" onClick={() => setTool("mermaid")}>Create Diagram</button>
+        <button onClick={() => setTool("rect")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Rectangle</button>
+        <button onClick={() => setTool("circle")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Circle</button>
+        <button onClick={() => setTool("line")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Line</button>
+        <button onClick={() => setTool("eraser")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Eraser</button>
+        <button onClick={() => setTool("text")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Text</button>
+        <button onClick={() => setTool("mermaid")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Create Diagram</button>
       </div>
     </>
   );
