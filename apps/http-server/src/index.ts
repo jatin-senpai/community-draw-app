@@ -1,7 +1,6 @@
 // server.ts
 import express from "express";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
 import cors from "cors";
 import { prismaClient } from "@repo/db/client";
 import { UserSchema, SignInSchema, RoomSchema } from "@repo/backend-common/types";
@@ -18,19 +17,17 @@ app.use(
 app.use(express.json());
 
 
-// signup
 app.post("/signup", async (req, res) => {
   const parseData = UserSchema.safeParse(req.body);
   if (!parseData.success) return res.status(400).json({ error: "invalid inputs" });
-  
 
   try {
     const user = await prismaClient.user.create({
-    data: {
-      email: parseData.data.email,
-      password: parseData.data.password,
-      name: parseData.data.name,
-    },
+      data: {
+        email: parseData.data.email,
+        password: parseData.data.password, 
+        name: parseData.data.name,
+      },
     });
 
     res.status(200).json({ userId: user.id });
@@ -46,12 +43,12 @@ app.post("/signin", async (req, res) => {
   if (!parseData.success) return res.status(400).json({ error: "invalid inputs" });
 
   const user = await prismaClient.user.findFirst({
-  where: {
-    email: parseData.data.email,
-    password: parseData.data.password,
-  },
-});
-
+    where: {
+      email: parseData.data.email,
+      password: parseData.data.password, 
+      
+    },
+  });
 
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
@@ -70,11 +67,10 @@ app.post("/create-room", middleware, async (req, res) => {
   try {
     const room = await prismaClient.room.create({
       data: {
-        slug: data.data.name, // could also generate uuid
+        slug: data.data.name,
         adminId: userId,
       },
     });
-
 
     await prismaClient.roomMember.create({
       data: {
@@ -110,6 +106,7 @@ app.post("/rooms/join/:slug", middleware, async (req, res) => {
   res.json({ success: true, roomId: room.id });
 });
 
+
 app.get("/rooms", middleware, async (req, res) => {
   // @ts-ignore
   const userId = req.userId;
@@ -119,7 +116,7 @@ app.get("/rooms", middleware, async (req, res) => {
     include: { room: true },
   });
 
-  return res.json({ rooms: memberships.map((m) => m.room) });
+  return res.json({ rooms: memberships.map((m: any) => m.room) }); // fixed TS error
 });
 
 
@@ -134,7 +131,7 @@ app.get("/chats/:roomId", middleware, async (req, res) => {
       take: 500,
     });
 
-    const shapes = chats.map((chat) => {
+    const shapes = chats.map((chat: any) => {
       let parsed: any = {};
       try {
         parsed = JSON.parse(chat.message);
@@ -150,6 +147,7 @@ app.get("/chats/:roomId", middleware, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 app.post("/chats/:roomId", middleware, async (req, res) => {
   const roomId = Number(req.params.roomId);
@@ -177,6 +175,7 @@ app.post("/chats/:roomId", middleware, async (req, res) => {
   }
 });
 
+
 app.delete("/chats/:roomId/:shapeId", middleware, async (req, res) => {
   const roomId = Number(req.params.roomId);
   const shapeId = req.params.shapeId;
@@ -191,7 +190,7 @@ app.delete("/chats/:roomId/:shapeId", middleware, async (req, res) => {
       where: {
         id: shapeId,
         roomId,
-        userId, // only allow deleting own shapes
+        userId,
       },
     });
 
@@ -201,7 +200,6 @@ app.delete("/chats/:roomId/:shapeId", middleware, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 app.listen(3003, () => {
   console.log("HTTP server listening on :3003");
