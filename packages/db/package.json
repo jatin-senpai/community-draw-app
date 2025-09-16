@@ -3,16 +3,16 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "exports": {
-    "./client": "./src/index.ts" 
+    "./client": "./src/index.ts"
   },
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b && node dist/index.js",
-    "postbuild": ""
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "6.13.0",
-    "@repo/typescript-config": "workspace:*",
-    "prisma": "^6.13.0"
+    "prisma": "^6.13.0",
+    "@repo/typescript-config": "workspace:*"
   }
 }
