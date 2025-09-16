@@ -1,2 +1,2 @@
-export const wsUrl = "ws://localhost:8080";
-export const httpUrl = "http://localhost:3003";
+export const wsUrl = "wss://community-draw-app.onrender.com";
+export const httpUrl = "https://sketchflow-7du4.onrender.com";

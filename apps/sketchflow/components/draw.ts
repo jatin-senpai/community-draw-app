@@ -41,7 +41,7 @@ export function redrawAll(
   const y = shape.y ?? 50;
 
   if (shape.img instanceof HTMLImageElement) {
-    // ✅ draw cached image instantly
+    
     ctx.drawImage(shape.img, x, y, width, height);
   }
 }

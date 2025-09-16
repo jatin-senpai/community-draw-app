@@ -74,7 +74,7 @@ export function Circle(
     });
 
     try {
-      const res = await fetch(`http://localhost:3003/chats/${roomId}`, {
+      const res = await fetch(`https://sketchflow-7du4.onrender.com/${roomId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

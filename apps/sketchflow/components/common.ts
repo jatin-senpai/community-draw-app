@@ -17,7 +17,7 @@ export interface DrawProps {
   x?: number;
   y?: number;
 
-  // ✅ cached image for mermaid diagrams
+  
   img?: HTMLImageElement;
 }
 
@@ -42,7 +42,7 @@ export function createMermaidShape(shape: {
     startX: shape.x,
     startY: shape.y,
     userId: shape.userId,
-    img: shape.img, // ✅ include cached image
+    img: shape.img, 
   };
 }
 
