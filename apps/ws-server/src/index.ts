@@ -60,7 +60,7 @@ wss.on("connection", (ws, request) => {
       return;
     }
 
-    // --- join room ---
+    
     if (data.type === "joinRoom") {
       const roomId = String(data.roomId);
       if (!conn.rooms.includes(roomId)) {
@@ -69,7 +69,7 @@ wss.on("connection", (ws, request) => {
       return;
     }
 
-    // --- leave room ---
+   
     if (data.type === "leaveRoom") {
       const roomId = String(data.roomId);
       conn.rooms = conn.rooms.filter((r) => r !== roomId);
