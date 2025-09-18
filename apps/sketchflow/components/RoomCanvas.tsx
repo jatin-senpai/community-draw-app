@@ -3,10 +3,11 @@ import {  useEffect, useState } from "react";
 
 import { wsUrl } from "./config";
 import { Canvas } from "./canvas";
-const token = localStorage.getItem("token")
+
 export function RoomCanvas({ roomId }: { roomId: number }) {
   const [socket,setSocket] =useState<WebSocket | null>(null);
   useEffect(()=>{
+    const token = localStorage.getItem("token")
     const ws = new WebSocket(`${wsUrl}?token=${token}`);
     ws.onopen=()=>{
       setSocket(ws)
