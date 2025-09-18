@@ -1,6 +1,5 @@
-import * as dotenv from 'dotenv';
+import dotenv from "dotenv";
 
-// Load environment variables from .env file
 dotenv.config();
 
-export const JWT_Secret = process.env.JWT_SECRET || 'default_fallback_secret';
+export const JWT_Secret = process.env.JWT || "default_secret";
