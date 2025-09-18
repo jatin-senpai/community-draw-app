@@ -75,6 +75,7 @@ export function Rect(
     });
 
     // broadcast to server
+    console.log("Sending shape", newShape);
     socket.send(
       JSON.stringify({
         type: "chat",
