@@ -2,8 +2,6 @@ import { DrawProps } from "../../components/common";
 import { redrawAll } from "../../components/draw";
 import { v4 as uuidv4 } from "uuid";
 
-
-
 export function Circle(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   setShapes: React.Dispatch<React.SetStateAction<DrawProps[]>>,
@@ -48,7 +46,7 @@ export function Circle(
     });
   }
 
-  async function onMouseUp(e: MouseEvent) {
+  function onMouseUp(e: MouseEvent) {
     if (!drawing) return;
     drawing = false;
 
@@ -58,7 +56,7 @@ export function Circle(
 
     if (radius < 2) return; // ignore tiny circles
 
-    const tempShape: DrawProps = {
+    const newShape: DrawProps = {
       id: uuidv4(),
       type: "circle",
       startX,
@@ -67,43 +65,30 @@ export function Circle(
     };
 
     setShapes((prev) => {
-      const updated = [...prev.filter((s) => s.id !== "preview"), tempShape];
+      const updated = [...prev.filter((s) => s.id !== "preview"), newShape];
       //@ts-ignore
       redrawAll(ctx, canvas, updated);
       return updated;
     });
 
-    try {
-      const res = await fetch(`https://httpserver-zram.onrender.com/${roomId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`, 
-        },
-        body: JSON.stringify(tempShape),
-      });
+    // Broadcast immediately
+    socket.send(
+      JSON.stringify({
+        type: "chat",
+        roomId,
+        message: JSON.stringify(newShape),
+      })
+    );
 
-      const savedShape = await res.json();
-
-      setShapes((prev) => {
-        const updated = prev.map((s) =>
-          s.id === tempShape.id ? savedShape : s
-        );
-        //@ts-ignore
-        redrawAll(ctx, canvas, updated);
-        return updated;
-      });
-
-      socket.send(
-        JSON.stringify({
-          type: "chat",
-          roomId,
-          message: JSON.stringify(savedShape),
-        })
-      );
-    } catch (err) {
-      console.error("Error saving circle:", err);
-    }
+    // Save in background (optional)
+    fetch(`https://httpserver-zram.onrender.com/${roomId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+      body: JSON.stringify(newShape),
+    }).catch((err) => console.error("Error saving circle:", err));
   }
 
   canvas.addEventListener("mousedown", onMouseDown);

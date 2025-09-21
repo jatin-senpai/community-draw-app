@@ -79,34 +79,39 @@ export function Canvas({
       );
       if (!code) return;
 
-      mermaid.render(`m-${Date.now()}`, code).then(({ svg }) => {
+      const shape = createMermaidShape({
+        id: crypto.randomUUID(),
+        code,
+        x: 100,
+        y: 100,
+        width: 300,
+        height: 200,
+      });
+
+      // locally render SVG
+      mermaid.render(`m-${shape.id}`, code).then(({ svg }) => {
         const img = new Image();
-        const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+        const svgBlob = new Blob([svg], {
+          type: "image/svg+xml;charset=utf-8",
+        });
         const url = URL.createObjectURL(svgBlob);
 
         img.onload = () => {
-          const shape = createMermaidShape({
-            id: crypto.randomUUID(),
-            code,
-            x: 100,
-            y: 100,
-            img,
-          });
-
-          setShapes((prev) => [...prev, shape]);
-          socket.send(
-            JSON.stringify({
-              type: "chat",
-              roomId,
-              message: JSON.stringify(shape),
-            })
-          );
-
+          setShapes((prev) => [...prev, { ...shape, img }]);
           URL.revokeObjectURL(url);
         };
 
         img.src = url;
       });
+
+      // broadcast shape (without img)
+      socket.send(
+        JSON.stringify({
+          type: "chat",
+          roomId,
+          message: JSON.stringify(shape),
+        })
+      );
     }
 
     return () => {
@@ -118,12 +123,42 @@ export function Canvas({
     <>
       <canvas ref={canvasRef} className="block h-screen w-screen bg-black" />
       <div className="absolute top-0 left-1/2 transform -translate-x-1/2 flex gap-4 mt-5 z-10">
-        <button onClick={() => setTool("rect")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Rectangle</button>
-        <button onClick={() => setTool("circle")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Circle</button>
-        <button onClick={() => setTool("line")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Line</button>
-        <button onClick={() => setTool("eraser")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Eraser</button>
-        <button onClick={() => setTool("text")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Text</button>
-        <button onClick={() => setTool("mermaid")} className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded">Create Diagram</button>
+        <button
+          onClick={() => setTool("rect")}
+          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded"
+        >
+          Rectangle
+        </button>
+        <button
+          onClick={() => setTool("circle")}
+          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded"
+        >
+          Circle
+        </button>
+        <button
+          onClick={() => setTool("line")}
+          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded"
+        >
+          Line
+        </button>
+        <button
+          onClick={() => setTool("eraser")}
+          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded"
+        >
+          Eraser
+        </button>
+        <button
+          onClick={() => setTool("text")}
+          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded"
+        >
+          Text
+        </button>
+        <button
+          onClick={() => setTool("mermaid")}
+          className="bg-blue-500 hover:bg-amber-400 text-black px-5 py-2 rounded"
+        >
+          Create Diagram
+        </button>
       </div>
     </>
   );
