@@ -13,9 +13,9 @@ model User {
   name        String?
   password    String
   photo       String?
-  rooms       Room[]       @relation("AdminRooms")  // rooms they admin
+  rooms       Room[]       @relation("AdminRooms") 
   chats       Chat[]
-  roomMembers RoomMember[] // rooms they joined
+  roomMembers RoomMember[] 
 }
 
 model Room {
@@ -46,5 +46,5 @@ model RoomMember {
   user User @relation(fields: [userId], references: [id])
   room Room @relation(fields: [roomId], references: [id])
 
-  @@unique([userId, roomId]) // prevent duplicate joins
+  @@unique([userId, roomId]) 
 }

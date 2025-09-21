@@ -44,7 +44,7 @@ export function Rect(
     setShapes((prev) => {
       //@ts-ignore
       redrawAll(ctx, canvas, [...prev, ...(previewShape ? [previewShape] : [])]);
-      return prev; // keep state unchanged until mouseup
+      return prev; 
     });
   }
 
@@ -55,7 +55,7 @@ export function Rect(
     const width = e.offsetX - startX;
     const height = e.offsetY - startY;
 
-    // permanent shape
+
     const newShape: DrawProps = {
       id: uuidv4(),
       type: "rect",
@@ -66,7 +66,7 @@ export function Rect(
     };
     previewShape = null;
 
-    // update state
+
     setShapes((prev) => {
       const updated = [...prev, newShape];
       //@ts-ignore
@@ -74,7 +74,7 @@ export function Rect(
       return updated;
     });
 
-    // broadcast to server
+
     console.log("Sending shape", newShape);
     socket.send(
       JSON.stringify({
@@ -85,12 +85,12 @@ export function Rect(
     );
   }
 
-  // Attach listeners
+
   canvas.addEventListener("mousedown", onMouseDown);
   canvas.addEventListener("mousemove", onMouseMove);
   canvas.addEventListener("mouseup", onMouseUp);
 
-  // Cleanup
+
   return () => {
     canvas.removeEventListener("mousedown", onMouseDown);
     canvas.removeEventListener("mousemove", onMouseMove);

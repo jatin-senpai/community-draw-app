@@ -7,7 +7,7 @@ import { prismaClient } from "@repo/db/client";
 
 interface UserConn {
   userId: string;
-  rooms: string[]; // array of stringified roomIds
+  rooms: string[]; 
   ws: WebSocket;
 }
 
@@ -27,7 +27,7 @@ function verifyToken(token: string): string | null {
 }
 
 wss.on("connection", (ws, request) => {
-  const url = request.url; // e.g. "/?token=abc"
+  const url = request.url; 
   if (!url) {
     ws.close(1008, "Invalid URL");
     return;
@@ -42,7 +42,7 @@ wss.on("connection", (ws, request) => {
     return;
   }
 
-  // track user connection
+
   const conn: UserConn = { userId, rooms: [], ws };
   users.push(conn);
 
@@ -76,7 +76,7 @@ wss.on("connection", (ws, request) => {
       return;
     }
 
-    // --- new shape / chat ---
+
     if (data.type === "chat") {
       const roomIdNum = Number(data.roomId);
       if (isNaN(roomIdNum)) return;
@@ -86,7 +86,7 @@ wss.on("connection", (ws, request) => {
         return;
       }
 
-      const rawMessage: string = data.message; // this is a JSON string from client
+      const rawMessage: string = data.message; 
       let shape: any;
       try {
         shape = JSON.parse(rawMessage);
@@ -95,14 +95,14 @@ wss.on("connection", (ws, request) => {
         return;
       }
 
-      // Persist in DB
+
       let chat;
       try {
         chat = await prismaClient.chat.create({
           data: {
             roomId: roomIdNum,
             userId: conn.userId,
-            message: rawMessage, // store raw (original) payload too
+            message: rawMessage, 
           },
         });
       } catch (err) {
@@ -110,12 +110,12 @@ wss.on("connection", (ws, request) => {
         return;
       }
 
-      // Critical: overwrite/attach database id + userId so frontends can erase/delete
+
       shape.id = chat.id;
       shape.userId = conn.userId;
 
-      // Broadcast to everyone in the room (including sender)
-      // Keep the `message` field as a JSON string because your frontend expects msg.message to be a JSON string
+
+
       const payload = JSON.stringify({
         type: "chat",
         roomId: roomIdNum,
@@ -135,7 +135,7 @@ wss.on("connection", (ws, request) => {
       return;
     }
 
-    // --- erase shape ---
+
     if (data.type === "erase") {
       const roomIdNum = Number(data.roomId);
       if (isNaN(roomIdNum)) return;
@@ -143,15 +143,15 @@ wss.on("connection", (ws, request) => {
       const shapeId: string = data.shapeId;
       if (!shapeId) return;
 
-      // delete from DB (if present)
+
       try {
         await prismaClient.chat.delete({ where: { id: shapeId } });
       } catch (err) {
         console.error("Error deleting shape:", err);
-        // still broadcast erase so UIs stay in sync even if shape was already gone
+
       }
 
-      // Broadcast erase
+
       const payload = JSON.stringify({
         type: "erase",
         roomId: roomIdNum,
@@ -171,7 +171,7 @@ wss.on("connection", (ws, request) => {
       return;
     }
 
-    // Unknown types are ignored
+
   });
 });
 

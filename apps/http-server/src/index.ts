@@ -37,7 +37,7 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-// signin
+
 app.post("/signin", async (req, res) => {
   const parseData = SignInSchema.safeParse(req.body);
   if (!parseData.success) return res.status(400).json({ error: "invalid inputs" });

@@ -17,7 +17,7 @@ export function Text(
     const text = prompt("Enter text:");
     if (!text) return;
 
-    // permanent text shape
+
     const newShape: DrawProps = {
       id: uuidv4(),
       type: "text",
@@ -26,7 +26,7 @@ export function Text(
       text,
     };
 
-    // update state + redraw
+
     setShapes((prev) => {
       const updated = [...prev, newShape];
       //@ts-ignore
@@ -34,7 +34,7 @@ export function Text(
       return updated;
     });
 
-    // broadcast to server
+
     socket.send(
       JSON.stringify({
         type: "chat",
@@ -44,10 +44,10 @@ export function Text(
     );
   }
 
-  // Attach listener
+
   canvas.addEventListener("click", onClick);
 
-  // Cleanup
+
   return () => {
     canvas.removeEventListener("click", onClick);
   };

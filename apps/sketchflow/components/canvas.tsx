@@ -20,7 +20,7 @@ export function Canvas({
   const [tool, setTool] = useState("");
   const [shapes, setShapes] = useState<DrawProps[]>([]);
 
-  // load existing shapes
+  
   useEffect(() => {
     getExistingShapes(roomId).then((data) => setShapes(data));
   }, [roomId]);
@@ -33,7 +33,7 @@ export function Canvas({
     canvas.height = window.innerHeight;
   }, []);
 
-  // redraw
+  
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -41,7 +41,7 @@ export function Canvas({
     if (ctx) redrawAll(ctx, canvas, shapes);
   }, [shapes]);
 
-  // WebSocket listener
+  
   useEffect(() => {
     socket.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -62,7 +62,6 @@ export function Canvas({
     };
   }, [socket]);
 
-  // tools
   useEffect(() => {
     let cleanup: (() => void) | undefined;
 
@@ -88,7 +87,7 @@ export function Canvas({
         height: 200,
       });
 
-      // locally render SVG
+
       mermaid.render(`m-${shape.id}`, code).then(({ svg }) => {
         const img = new Image();
         const svgBlob = new Blob([svg], {
@@ -104,7 +103,7 @@ export function Canvas({
         img.src = url;
       });
 
-      // broadcast shape (without img)
+
       socket.send(
         JSON.stringify({
           type: "chat",

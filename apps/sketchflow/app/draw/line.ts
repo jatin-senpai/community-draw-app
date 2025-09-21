@@ -29,7 +29,7 @@ export function Line(
     if (!drawing) return;
 
     previewShape = {
-      id: uuidv4(), // temporary ID for preview
+      id: uuidv4(), 
       type: "line",
       startX,
       startY,
@@ -40,7 +40,7 @@ export function Line(
     setShapes((prev) => {
       //@ts-ignore
       redrawAll(ctx, canvas, [...prev, ...(previewShape ? [previewShape] : [])]);
-      return prev; // don't commit preview to state
+      return prev; 
     });
   }
 
@@ -49,7 +49,7 @@ export function Line(
     drawing = false;
 
     const newShape: DrawProps = {
-      id: uuidv4(), // permanent ID
+      id: uuidv4(), 
       type: "line",
       startX,
       startY,
@@ -58,7 +58,7 @@ export function Line(
     };
     previewShape = null;
 
-    // Commit new shape
+
     setShapes((prev) => {
       const updated = [...prev, newShape];
       //@ts-ignore
@@ -66,7 +66,7 @@ export function Line(
       return updated;
     });
 
-    // Broadcast to server/other clients
+
     socket.send(
       JSON.stringify({
         type: "chat",
@@ -76,12 +76,12 @@ export function Line(
     );
   }
 
-  // Attach listeners
+
   canvas.addEventListener("mousedown", onMouseDown);
   canvas.addEventListener("mousemove", onMouseMove);
   canvas.addEventListener("mouseup", onMouseUp);
 
-  // Cleanup on unmount
+
   return () => {
     canvas.removeEventListener("mousedown", onMouseDown);
     canvas.removeEventListener("mousemove", onMouseMove);
